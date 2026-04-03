@@ -31,7 +31,7 @@ class _RentCollectionScreenState extends State<RentCollectionScreen> {
     final ownerId = authService.currentUser!.uid;
 
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+      backgroundColor: AppTheme.bg(context),
       appBar: AppBar(
         title: const Text('Rent Collection', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
@@ -73,11 +73,11 @@ class _RentCollectionScreenState extends State<RentCollectionScreen> {
 
   Widget _buildMonthSelector() {
     return Container(
-      color: Colors.white,
+      color: AppTheme.card(context),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
         children: [
-          const Icon(Icons.calendar_month, color: AppTheme.primaryColor),
+          Icon(Icons.calendar_month, color: AppTheme.primary(context)),
           const SizedBox(width: 12),
           Expanded(
             child: DropdownButtonHideUnderline(
@@ -118,8 +118,8 @@ class _RentCollectionScreenState extends State<RentCollectionScreen> {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppTheme.primaryColor, Color(0xFF9C95FF)],
+        gradient: LinearGradient(
+          colors: [AppTheme.primary(context), const Color(0xFF9C95FF)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -181,16 +181,10 @@ class _RentCollectionScreenState extends State<RentCollectionScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.card(context),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: statusColor.withValues(alpha: 0.2)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: [AppTheme.softShadow(context)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -198,10 +192,10 @@ class _RentCollectionScreenState extends State<RentCollectionScreen> {
           Row(
             children: [
               CircleAvatar(
-                backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                backgroundColor: AppTheme.primary(context).withValues(alpha: 0.1),
                 child: Text(
                   rent.tenantName.isNotEmpty ? rent.tenantName[0].toUpperCase() : '?',
-                  style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: AppTheme.primary(context), fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(width: 12),
@@ -212,7 +206,7 @@ class _RentCollectionScreenState extends State<RentCollectionScreen> {
                     Text(rent.tenantName,
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                     Text('Room ${rent.roomNumber}',
-                        style: const TextStyle(color: AppTheme.lightTextColor, fontSize: 12)),
+                        style: TextStyle(color: AppTheme.subtext(context), fontSize: 12)),
                   ],
                 ),
               ),
@@ -232,7 +226,7 @@ class _RentCollectionScreenState extends State<RentCollectionScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('₹${rent.amount.toStringAsFixed(0)}',
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.secondaryColor)),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.secondary(context))),
               Text(
                 rent.status == RentStatus.paid
                     ? 'Paid on ${DateFormat('dd MMM').format(rent.paidDate!)}'
@@ -285,17 +279,17 @@ class _RentCollectionScreenState extends State<RentCollectionScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.receipt_long_outlined, size: 80, color: Colors.grey.withValues(alpha: 0.3)),
+            Icon(Icons.receipt_long_outlined, size: 80, color: AppTheme.subtext(context).withValues(alpha: 0.3)),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'No rent records for this period',
-              style: TextStyle(fontSize: 16, color: AppTheme.lightTextColor),
+              style: TextStyle(fontSize: 16, color: AppTheme.subtext(context)),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Tap the button below to generate rent records for all tenants in your properties.',
-              style: TextStyle(fontSize: 13, color: AppTheme.lightTextColor),
+              style: TextStyle(fontSize: 13, color: AppTheme.subtext(context)),
               textAlign: TextAlign.center,
             ),
           ],
@@ -314,7 +308,7 @@ class _RentCollectionScreenState extends State<RentCollectionScreen> {
         final properties = snapshot.data ?? [];
         return FloatingActionButton.extended(
           onPressed: () => _generateRent(ownerId, properties, rentService),
-          backgroundColor: AppTheme.primaryColor,
+          backgroundColor: AppTheme.primary(context),
           icon: const Icon(Icons.receipt_long, color: Colors.white),
           label: const Text('Generate Rent', style: TextStyle(color: Colors.white)),
         );
