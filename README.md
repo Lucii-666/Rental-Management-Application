@@ -16,7 +16,7 @@
 
 *The ultimate ecosystem bridging the gap between Property Owners and Tenants with enterprise-level security and real-time syncing.*
 
-<hr width="80%">
+<img src="https://user-images.githubusercontent.com/73097560/115834477-dbab4520-a447-11eb-908a-139a6edaec5c.gif" width="100%">
 
 </div>
 
@@ -29,7 +29,7 @@ Managing properties and tracking rent shouldn't require manual ledgers, missing 
 
 ## 🏗️ Core Architecture & Features
 
-### 1. 🔐 The Security Layer
+### 1. 🔐 [![Security Layer](https://readme-typing-svg.demolab.com?font=Space+Grotesk&weight=700&size=22&pause=1000&color=00B4D8&vCenter=true&width=400&lines=The+Security+Layer)](https://git.io/typing-svg)
 We don't just use standard logins. Our security mesh includes:
 
 - **Phone OTP & Biometric Fallbacks**: Frictionless and secure entry.
@@ -38,7 +38,7 @@ We don't just use standard logins. Our security mesh includes:
 
 <br>
 
-### 2. ⚡ The Lightning Network (Push & Sync)
+### 2. ⚡ [![Lightning Network](https://readme-typing-svg.demolab.com?font=Space+Grotesk&weight=700&size=22&pause=1000&color=00B4D8&vCenter=true&width=500&lines=The+Lightning+Network+(Push+%26+Sync))](https://git.io/typing-svg)
 Manual pull-to-refresh is a thing of the past:
 
 - **Supabase Edge Functions**: We wrote a custom Deno-based Edge Function that instantly translates database writes into OS-level Push Notifications.
@@ -47,7 +47,7 @@ Manual pull-to-refresh is a thing of the past:
 
 <br>
 
-### 3. 💵 The Financial Engine
+### 3. 💵 [![Financial Engine](https://readme-typing-svg.demolab.com?font=Space+Grotesk&weight=700&size=22&pause=1000&color=00B4D8&vCenter=true&width=400&lines=The+Financial+Engine)](https://git.io/typing-svg)
 The crown jewel of the application.
 
 - **Batch Generation**: Owners can tap a single button to generate expected rent records for 500+ tenants simultaneously.
@@ -57,7 +57,7 @@ The crown jewel of the application.
 <br><br>
 
 <div align="center">
-<hr width="80%">
+<img src="https://user-images.githubusercontent.com/73097560/115834477-dbab4520-a447-11eb-908a-139a6edaec5c.gif" width="100%">
 
 ### 🌊 Flow & Logic
 ```mermaid

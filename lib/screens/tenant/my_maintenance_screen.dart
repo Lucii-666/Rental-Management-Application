@@ -11,26 +11,51 @@ class MyMaintenanceScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context, listen: false);
+    final authService = Provider.of<AuthService>(context);
     final propertyService = Provider.of<PropertyService>(context, listen: false);
     final tenantId = authService.currentUser!.uid;
+    final user = authService.userModel;
+    final hasRoom = user?.roomId != null && user!.roomId!.isNotEmpty;
 
     return Scaffold(
       backgroundColor: AppTheme.bg(context),
       appBar: AppBar(
         title: const Text('Maintenance', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ReportMaintenanceScreen()),
-        ),
-        backgroundColor: AppTheme.primary(context),
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('New Request', style: TextStyle(color: Colors.white)),
-      ),
-      body: StreamBuilder<List<MaintenanceRequestModel>>(
-        stream: propertyService.getTenantMaintenanceRequestsStream(tenantId),
+      floatingActionButton: hasRoom
+          ? FloatingActionButton.extended(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ReportMaintenanceScreen()),
+              ),
+              backgroundColor: AppTheme.primary(context),
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text('New Request', style: TextStyle(color: Colors.white)),
+            )
+          : null,
+      body: Column(
+        children: [
+          if (!hasRoom)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              color: Colors.orange.withValues(alpha: 0.1),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'You need to be assigned to a room before reporting issues.',
+                      style: TextStyle(color: Colors.orange, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: StreamBuilder<List<MaintenanceRequestModel>>(
+              stream: propertyService.getTenantMaintenanceRequestsStream(tenantId),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -84,6 +109,9 @@ class MyMaintenanceScreen extends StatelessWidget {
             ],
           );
         },
+            ),
+          ),
+        ],
       ),
     );
   }

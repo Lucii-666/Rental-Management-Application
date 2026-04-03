@@ -6,6 +6,7 @@ import '../../utils/app_theme.dart';
 import '../../models/property_model.dart';
 import '../../models/join_request_model.dart';
 import '../../models/room_request_model.dart';
+import '../../models/maintenance_model.dart';
 import 'add_property_screen.dart';
 import 'property_details_screen.dart';
 import 'requests_hub_screen.dart';
@@ -116,16 +117,28 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                   CircleAvatar(
+                  CircleAvatar(
                     radius: 35,
                     backgroundColor: AppTheme.card(context),
-                    child: Icon(Icons.person, size: 40, color: AppTheme.primary(context)),
+                    backgroundImage: authService.userModel?.photoUrl != null
+                        ? NetworkImage(authService.userModel!.photoUrl!)
+                        : null,
+                    child: authService.userModel?.photoUrl == null
+                        ? Icon(Icons.person, size: 40, color: AppTheme.primary(context))
+                        : null,
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    authService.currentUser?.phoneNumber ?? 'Owner',
+                    authService.userModel?.name ?? authService.currentUser?.email ?? 'Owner',
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
                   ),
+                  if (authService.userModel?.email != null)
+                    Text(
+                      authService.userModel!.email!,
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                 ],
               ),
             ),
@@ -207,6 +220,8 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                 _buildRentCollectionShortcut(),
                 const SizedBox(height: 16),
                 _buildDocumentVerificationShortcut(),
+                const SizedBox(height: 16),
+                _buildTenantHistoryShortcut(),
               ],
             ),
           );
@@ -261,17 +276,26 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const MaintenanceDashboard()),
-                      );
-                    },
-                    child: _buildStatCard(
-                      'Requests',
-                      '0', // We can add maintenance count later
-                      Icons.notifications_active,
-                      Colors.redAccent,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const MaintenanceDashboard()),
+                    ),
+                    child: StreamBuilder<List<MaintenanceRequestModel>>(
+                      stream: propertyService.getOwnerMaintenanceRequestsStream(
+                        authService.currentUser!.uid,
+                      ),
+                      builder: (context, snapshot) {
+                        final pending = snapshot.data
+                                ?.where((r) => r.status != MaintenanceStatus.resolved)
+                                .length ??
+                            0;
+                        return _buildStatCard(
+                          'Requests',
+                          '$pending',
+                          Icons.build_outlined,
+                          Colors.redAccent,
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -451,6 +475,52 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                       style: TextStyle(
                           color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
                   Text('Review & verify tenant identity documents',
+                      style: TextStyle(color: Colors.white70, fontSize: 12)),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTenantHistoryShortcut() {
+    return InkWell(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const TenantHistoryScreen()),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.deepPurple, Colors.deepPurple.withValues(alpha: 0.7)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.deepPurple.withValues(alpha: 0.3),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.history_rounded, color: Colors.white, size: 32),
+            SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Tenant History',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                  Text('View past tenants, move-out dates & reasons',
                       style: TextStyle(color: Colors.white70, fontSize: 12)),
                 ],
               ),
