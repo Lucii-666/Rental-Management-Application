@@ -69,9 +69,9 @@ class _PropertyExplorerScreenState extends State<PropertyExplorerScreen> {
           const SizedBox(height: 4),
           Row(
             children: [
-              const Icon(Icons.location_on, size: 16, color: Colors.grey),
+              Icon(Icons.location_on, size: 16, color: AppTheme.subtext(context)),
               const SizedBox(width: 4),
-              Text(property.address, style: const TextStyle(color: Colors.grey)),
+              Text(property.address, style: TextStyle(color: AppTheme.subtext(context))),
             ],
           ),
         ],
@@ -102,7 +102,7 @@ class _PropertyExplorerScreenState extends State<PropertyExplorerScreen> {
             _showRoomRequestDialog(room);
           },
           style: ElevatedButton.styleFrom(
-            backgroundColor: isFull ? Colors.grey : AppTheme.primaryColor,
+            backgroundColor: isFull ? Colors.grey : AppTheme.primary(context),
           ),
           child: Text(isFull ? 'Full' : 'Request'),
         ),
