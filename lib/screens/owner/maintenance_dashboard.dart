@@ -14,7 +14,7 @@ class MaintenanceDashboard extends StatelessWidget {
     final propertyService = Provider.of<PropertyService>(context, listen: false);
 
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+      backgroundColor: AppTheme.bg(context),
       appBar: AppBar(
         title: const Text('Maintenance Requests', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
@@ -28,8 +28,8 @@ class MaintenanceDashboard extends StatelessWidget {
           final requests = snapshot.data ?? [];
 
           if (requests.isEmpty) {
-            return const Center(
-              child: Text('No maintenance requests found.', style: TextStyle(color: AppTheme.lightTextColor)),
+            return Center(
+              child: Text('No maintenance requests found.', style: TextStyle(color: AppTheme.subtext(context))),
             );
           }
 
@@ -51,15 +51,9 @@ class MaintenanceDashboard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.card(context),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: [AppTheme.softShadow(context)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -77,20 +71,20 @@ class MaintenanceDashboard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             request.description,
-            style: const TextStyle(color: AppTheme.lightTextColor),
+            style: TextStyle(color: AppTheme.subtext(context)),
           ),
           const Divider(height: 24),
           Row(
             children: [
-              const Icon(Icons.person_outline, size: 16, color: AppTheme.lightTextColor),
+              Icon(Icons.person_outline, size: 16, color: AppTheme.subtext(context)),
               const SizedBox(width: 4),
-              Text(request.tenantName, style: const TextStyle(fontSize: 13, color: AppTheme.lightTextColor)),
+              Text(request.tenantName, style: TextStyle(fontSize: 13, color: AppTheme.subtext(context))),
               const Spacer(),
-              const Icon(Icons.calendar_today_outlined, size: 16, color: AppTheme.lightTextColor),
+              Icon(Icons.calendar_today_outlined, size: 16, color: AppTheme.subtext(context)),
               const SizedBox(width: 4),
               Text(
                 '${request.createdAt.day}/${request.createdAt.month}/${request.createdAt.year}',
-                style: const TextStyle(fontSize: 13, color: AppTheme.lightTextColor),
+                style: TextStyle(fontSize: 13, color: AppTheme.subtext(context)),
               ),
             ],
           ),
