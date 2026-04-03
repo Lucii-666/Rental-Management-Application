@@ -15,7 +15,7 @@ class NotificationsScreen extends StatelessWidget {
     final notificationService = Provider.of<NotificationService>(context);
 
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+      backgroundColor: AppTheme.bg(context),
       appBar: AppBar(
         title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
@@ -43,7 +43,7 @@ class NotificationsScreen extends StatelessWidget {
                 children: [
                   Icon(Icons.notifications_none_rounded, size: 80, color: Colors.grey.withValues(alpha: 0.3)),
                   const SizedBox(height: 16),
-                  const Text('No notifications yet', style: TextStyle(color: AppTheme.lightTextColor)),
+                  Text('No notifications yet', style: TextStyle(color: AppTheme.subtext(context))),
                 ],
               ),
             );
@@ -85,7 +85,7 @@ class NotificationsScreen extends StatelessWidget {
         break;
       default:
         icon = Icons.notifications_rounded;
-        color = AppTheme.primaryColor;
+        color = AppTheme.primary(context);
     }
 
     return Dismissible(
@@ -132,7 +132,7 @@ class NotificationsScreen extends StatelessWidget {
             children: [
               Text(
                 notification.message,
-                style: const TextStyle(fontSize: 14, color: AppTheme.lightTextColor),
+                style: TextStyle(fontSize: 14, color: AppTheme.subtext(context)),
               ),
               const SizedBox(height: 4),
               Text(
