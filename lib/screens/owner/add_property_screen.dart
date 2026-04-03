@@ -63,7 +63,7 @@ class _AddPropertyScreenState extends State<AddPropertyScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+      backgroundColor: AppTheme.bg(context),
       appBar: AppBar(
         title: const Text('Add New Property', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
@@ -158,7 +158,7 @@ class _AddPropertyScreenState extends State<AddPropertyScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.secondaryColor)),
+        Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.secondary(context))),
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
@@ -166,7 +166,7 @@ class _AddPropertyScreenState extends State<AddPropertyScreen> {
           maxLines: maxLines,
           decoration: InputDecoration(
             hintText: hint,
-            prefixIcon: Icon(icon, color: AppTheme.primaryColor),
+            prefixIcon: Icon(icon, color: AppTheme.primary(context)),
           ),
           validator: isRequired 
               ? (value) => value == null || value.isEmpty ? 'This field is required' : null
