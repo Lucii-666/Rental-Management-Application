@@ -22,10 +22,10 @@ class _IdentityUploadScreenState extends State<IdentityUploadScreen> {
   bool _isUploading = false;
   File? _selectedImage;
 
-  Future<void> _pickImage() async {
+  Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
     final XFile? image = await picker.pickImage(
-      source: ImageSource.camera,
+      source: source,
       imageQuality: 70,
       maxWidth: 1024,
       maxHeight: 1024,
@@ -33,6 +33,61 @@ class _IdentityUploadScreenState extends State<IdentityUploadScreen> {
     if (image != null) {
       setState(() => _selectedImage = File(image.path));
     }
+  }
+
+  void _showSourcePicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: AppTheme.dividerColor(context),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Text('Select Source', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.text(context))),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: AppTheme.primary(context).withValues(alpha: 0.1),
+                  child: Icon(Icons.camera_alt_outlined, color: AppTheme.primary(context)),
+                ),
+                title: const Text('Camera'),
+                subtitle: Text('Take a photo now', style: TextStyle(color: AppTheme.subtext(context), fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: AppTheme.primary(context).withValues(alpha: 0.1),
+                  child: Icon(Icons.photo_library_outlined, color: AppTheme.primary(context)),
+                ),
+                title: const Text('Gallery'),
+                subtitle: Text('Choose from your photos', style: TextStyle(color: AppTheme.subtext(context), fontSize: 12)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _handleUpload() async {
@@ -169,7 +224,7 @@ class _IdentityUploadScreenState extends State<IdentityUploadScreen> {
                   ),
                   const SizedBox(height: 32),
                   GestureDetector(
-                    onTap: _pickImage,
+                    onTap: _showSourcePicker,
                     child: Container(
                       height: 200,
                       decoration: BoxDecoration(
@@ -184,9 +239,11 @@ class _IdentityUploadScreenState extends State<IdentityUploadScreen> {
                           ? Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.add_a_photo_outlined, size: 48, color: AppTheme.subtext(context)),
+                                Icon(Icons.upload_file_outlined, size: 48, color: AppTheme.subtext(context)),
                                 const SizedBox(height: 12),
-                                Text('Tap to capture photo', style: TextStyle(color: AppTheme.subtext(context))),
+                                Text('Tap to upload or capture', style: TextStyle(color: AppTheme.subtext(context), fontWeight: FontWeight.w500)),
+                                const SizedBox(height: 4),
+                                Text('Camera or Gallery', style: TextStyle(color: AppTheme.subtext(context), fontSize: 12)),
                               ],
                             )
                           : null,
