@@ -103,7 +103,7 @@ class _ReportMaintenanceScreenState extends State<ReportMaintenanceScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Icon(Icons.build_circle_outlined, size: 60, color: AppTheme.primaryColor),
+            Icon(Icons.build_circle_outlined, size: 60, color: AppTheme.primary(context)),
             const SizedBox(height: 24),
             const Text(
               'What needs fixing?',
@@ -121,9 +121,9 @@ class _ReportMaintenanceScreenState extends State<ReportMaintenanceScreen> {
               child: Container(
                 height: 150,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                  color: AppTheme.surface(context),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.shade300),
+                  border: Border.all(color: AppTheme.dividerColor(context)),
                   image: _selectedImage != null 
                     ? DecorationImage(image: FileImage(_selectedImage!), fit: BoxFit.cover)
                     : null,
