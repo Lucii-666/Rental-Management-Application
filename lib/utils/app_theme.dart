@@ -62,6 +62,20 @@ class AppTheme {
         offset: const Offset(0, 4),
       );
 
+  // ── Input decoration helper ─────────────────────────────────────────────
+  static InputDecoration inputDecoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon),
+      filled: true,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+    );
+  }
+
   // ── Light theme ────────────────────────────────────────────────────────────
   static ThemeData get lightTheme {
     return ThemeData(
