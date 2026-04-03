@@ -197,6 +197,17 @@ class PropertyService extends ChangeNotifier {
   }
 
   // Maintenance Request Management
+  Stream<List<MaintenanceRequestModel>> getTenantMaintenanceRequestsStream(String tenantId) {
+    return _firestore
+        .collection('maintenance_requests')
+        .where('tenantId', isEqualTo: tenantId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => MaintenanceRequestModel.fromMap(doc.data(), doc.id))
+            .toList());
+  }
+
   Stream<List<MaintenanceRequestModel>> getOwnerMaintenanceRequestsStream(String ownerId) {
     return _firestore
         .collection('maintenance_requests')
@@ -313,20 +324,38 @@ class PropertyService extends ChangeNotifier {
       'ownerId': propertyDoc.data()?['ownerId'],
     });
 
-    // 2. Decrement Room Occupancy
+    // 2. Decrement Room Occupancy — room is now vacant
     final roomDoc = await _firestore
         .collection('properties')
         .doc(propertyId)
         .collection('rooms')
         .doc(roomId)
         .get();
-        
+
     if (roomDoc.exists) {
       final currentOcc = roomDoc.data()?['currentOccupancy'] ?? 1;
       await roomDoc.reference.update({'currentOccupancy': max(0, currentOcc - 1)});
     }
 
-    // 3. Remove from Active Tenants
+    // 3. Clear user's propertyId and roomId so dashboard shows "not joined"
+    await _firestore.collection('users').doc(tenantId).update({
+      'propertyId': null,
+      'roomId': null,
+    });
+
+    // 4. Notify tenant of removal
+    await _firestore.collection('notifications').add({
+      'userId': tenantId,
+      'title': 'Removed from Property',
+      'message': reason.isNotEmpty
+          ? 'You have been removed from $propertyName. Reason: $reason'
+          : 'You have been removed from $propertyName.',
+      'type': 'general',
+      'createdAt': DateTime.now().toIso8601String(),
+      'isRead': false,
+    });
+
+    // 5. Remove from Active Tenants
     await tenantDoc.reference.delete();
   }
 

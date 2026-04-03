@@ -5,6 +5,7 @@ import '../../models/rent_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/rent_service.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/receipt_generator.dart';
 
 class MyRentScreen extends StatelessWidget {
   const MyRentScreen({super.key});
@@ -87,23 +88,28 @@ class MyRentScreen extends StatelessWidget {
   }
 
   Widget _buildCurrentRentCard(BuildContext context, RentPaymentModel rent) {
-    final statusColor = {
-      RentStatus.paid: Colors.green,
-      RentStatus.pending: Colors.orange,
-      RentStatus.overdue: Colors.red,
-    }[rent.status]!;
+    Color statusColor;
+    String statusLabel;
+    IconData statusIcon;
 
-    final statusLabel = {
-      RentStatus.paid: 'Paid',
-      RentStatus.pending: 'Due',
-      RentStatus.overdue: 'Overdue',
-    }[rent.status]!;
-
-    final statusIcon = {
-      RentStatus.paid: Icons.check_circle_rounded,
-      RentStatus.pending: Icons.schedule_rounded,
-      RentStatus.overdue: Icons.warning_amber_rounded,
-    }[rent.status]!;
+    switch (rent.status) {
+      case RentStatus.paid:
+        statusColor = Colors.green;
+        statusLabel = 'Paid';
+        statusIcon = Icons.check_circle_rounded;
+      case RentStatus.partiallyPaid:
+        statusColor = Colors.blue;
+        statusLabel = 'Partially Paid';
+        statusIcon = Icons.payments_rounded;
+      case RentStatus.overdue:
+        statusColor = Colors.red;
+        statusLabel = 'Overdue';
+        statusIcon = Icons.warning_amber_rounded;
+      case RentStatus.pending:
+        statusColor = Colors.orange;
+        statusLabel = 'Due';
+        statusIcon = Icons.schedule_rounded;
+    }
 
     return Container(
       width: double.infinity,
@@ -143,6 +149,34 @@ class MyRentScreen extends StatelessWidget {
             style: const TextStyle(
                 color: Colors.white, fontSize: 40, fontWeight: FontWeight.bold),
           ),
+          // Carry forward breakdown
+          if (rent.carryForward > 0) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.info_outline, color: Colors.white60, size: 14),
+                const SizedBox(width: 6),
+                Text(
+                  '₹${rent.baseAmount.toStringAsFixed(0)} rent + ₹${rent.carryForward.toStringAsFixed(0)} previous due',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ],
+          // Partial payment remaining
+          if (rent.status == RentStatus.partiallyPaid) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.payments_outlined, color: Colors.white60, size: 14),
+                const SizedBox(width: 6),
+                Text(
+                  'Paid ₹${rent.paidAmount.toStringAsFixed(0)} — ₹${rent.balance.toStringAsFixed(0)} pending',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 4),
           Text(
             'Room ${rent.roomNumber}',
@@ -184,6 +218,29 @@ class MyRentScreen extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            ),
+          ],
+          // Receipt download button for paid or partially paid records
+          if (rent.status == RentStatus.paid || rent.status == RentStatus.partiallyPaid) ...[
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () => ReceiptGenerator.shareReceipt(rent),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.download_rounded, color: Colors.white, size: 18),
+                    SizedBox(width: 8),
+                    Text('Download Receipt', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  ],
+                ),
               ),
             ),
           ],
@@ -236,17 +293,25 @@ class MyRentScreen extends StatelessWidget {
   }
 
   Widget _buildHistoryTile(BuildContext context, RentPaymentModel rent) {
-    final statusColor = {
-      RentStatus.paid: Colors.green,
-      RentStatus.pending: Colors.orange,
-      RentStatus.overdue: Colors.red,
-    }[rent.status]!;
+    Color statusColor;
+    String statusLabel;
 
-    final statusLabel = {
-      RentStatus.paid: 'Paid',
-      RentStatus.pending: 'Pending',
-      RentStatus.overdue: 'Overdue',
-    }[rent.status]!;
+    switch (rent.status) {
+      case RentStatus.paid:
+        statusColor = Colors.green;
+        statusLabel = 'Paid';
+      case RentStatus.partiallyPaid:
+        statusColor = Colors.blue;
+        statusLabel = 'Partial';
+      case RentStatus.overdue:
+        statusColor = Colors.red;
+        statusLabel = 'Overdue';
+      case RentStatus.pending:
+        statusColor = Colors.orange;
+        statusLabel = 'Pending';
+    }
+
+    final canDownload = rent.status == RentStatus.paid || rent.status == RentStatus.partiallyPaid;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -277,7 +342,9 @@ class MyRentScreen extends StatelessWidget {
                 Text(
                   rent.status == RentStatus.paid && rent.paidDate != null
                       ? 'Paid on ${DateFormat('dd MMM yyyy').format(rent.paidDate!)}'
-                      : 'Due ${DateFormat('dd MMM yyyy').format(rent.dueDate)}',
+                      : rent.status == RentStatus.partiallyPaid
+                          ? 'Paid ₹${rent.paidAmount.toStringAsFixed(0)} — ₹${rent.balance.toStringAsFixed(0)} due next'
+                          : 'Due ${DateFormat('dd MMM yyyy').format(rent.dueDate)}',
                   style: TextStyle(color: AppTheme.subtext(context), fontSize: 12),
                 ),
               ],
@@ -300,6 +367,19 @@ class MyRentScreen extends StatelessWidget {
                 child: Text(statusLabel,
                     style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold)),
               ),
+              if (canDownload) ...[
+                const SizedBox(height: 4),
+                GestureDetector(
+                  onTap: () => ReceiptGenerator.shareReceipt(rent),
+                  child: Row(
+                    children: [
+                      Icon(Icons.download_rounded, size: 13, color: AppTheme.primary(context)),
+                      const SizedBox(width: 3),
+                      Text('Receipt', style: TextStyle(fontSize: 11, color: AppTheme.primary(context), fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ],

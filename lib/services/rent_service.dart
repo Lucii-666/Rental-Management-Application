@@ -7,6 +7,7 @@ class RentService extends ChangeNotifier {
 
   // Generate rent records for ALL tenants in a property for a given month/year.
   // Skips tenants who already have a record for that period.
+  // Automatically adds any carry forward from the previous month.
   Future<String?> generateRentForProperty({
     required String propertyId,
     required String ownerId,
@@ -14,7 +15,6 @@ class RentService extends ChangeNotifier {
     required int year,
   }) async {
     try {
-      // Fetch all rooms in the property
       final roomsSnap = await _firestore
           .collection('properties')
           .doc(propertyId)
@@ -25,9 +25,8 @@ class RentService extends ChangeNotifier {
         final roomData = roomDoc.data();
         final roomId = roomDoc.id;
         final roomNumber = roomData['roomNumber'] ?? '';
-        final rentAmount = (roomData['rentAmount'] ?? 0.0).toDouble();
+        final baseRent = (roomData['rentAmount'] ?? 0.0).toDouble();
 
-        // Fetch all tenants assigned to this room
         final tenantsSnap = await _firestore
             .collection('properties')
             .doc(propertyId)
@@ -40,7 +39,7 @@ class RentService extends ChangeNotifier {
           final tenantId = tenantDoc.id;
           final tenantName = tenantData['name'] ?? '';
 
-          // Check if record already exists for this tenant/month/year
+          // Skip if record already exists
           final existing = await _firestore
               .collection('rent_payments')
               .where('tenantId', isEqualTo: tenantId)
@@ -50,10 +49,31 @@ class RentService extends ChangeNotifier {
 
           if (existing.docs.isNotEmpty) continue;
 
-          // Due date = 5th of the given month
-          final dueDate = DateTime(year, month, 5);
+          // Check for carry forward from the previous month
+          final prevMonth = month == 1 ? 12 : month - 1;
+          final prevYear = month == 1 ? year - 1 : year;
+          double carryForward = 0;
 
-          // Determine status: if dueDate is in the past and unpaid → overdue
+          final prevSnap = await _firestore
+              .collection('rent_payments')
+              .where('tenantId', isEqualTo: tenantId)
+              .where('month', isEqualTo: prevMonth)
+              .where('year', isEqualTo: prevYear)
+              .limit(1)
+              .get();
+
+          if (prevSnap.docs.isNotEmpty) {
+            final prev = RentPaymentModel.fromMap(
+              prevSnap.docs.first.data(),
+              prevSnap.docs.first.id,
+            );
+            if (prev.status == RentStatus.partiallyPaid) {
+              carryForward = prev.balance; // = prev.amount - prev.paidAmount
+            }
+          }
+
+          final totalAmount = baseRent + carryForward;
+          final dueDate = DateTime(year, month, 5);
           final status = dueDate.isBefore(DateTime.now())
               ? RentStatus.overdue
               : RentStatus.pending;
@@ -66,7 +86,9 @@ class RentService extends ChangeNotifier {
             tenantId: tenantId,
             tenantName: tenantName,
             ownerId: ownerId,
-            amount: rentAmount,
+            amount: totalAmount,
+            baseAmount: baseRent,
+            carryForward: carryForward,
             dueDate: dueDate,
             status: status,
             month: month,
@@ -82,17 +104,20 @@ class RentService extends ChangeNotifier {
     }
   }
 
-  // Mark a rent record as paid
+  // Mark a rent record as fully paid
   Future<String?> markAsPaid(String rentId, {String? notes}) async {
     try {
+      final doc = await _firestore.collection('rent_payments').doc(rentId).get();
+      if (!doc.exists) return 'Record not found';
+      final rent = RentPaymentModel.fromMap(doc.data()!, rentId);
+
       await _firestore.collection('rent_payments').doc(rentId).update({
         'status': RentStatus.paid.name,
+        'paidAmount': rent.amount, // full amount paid
         'paidDate': Timestamp.fromDate(DateTime.now()),
-        if (notes != null) 'notes': notes,
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
       });
 
-      // Notify tenant
-      final doc = await _firestore.collection('rent_payments').doc(rentId).get();
       final tenantId = doc.data()?['tenantId'];
       final monthLabel = _monthLabel(doc.data()?['month'], doc.data()?['year']);
 
@@ -100,8 +125,55 @@ class RentService extends ChangeNotifier {
         await _firestore.collection('notifications').add({
           'userId': tenantId,
           'title': 'Rent Received',
-          'message': 'Your rent for $monthLabel has been marked as paid.',
+          'message': 'Your rent of ₹${rent.amount.toStringAsFixed(0)} for $monthLabel has been marked as paid.',
           'type': 'rent_paid',
+          'createdAt': DateTime.now().toIso8601String(),
+          'isRead': false,
+        });
+      }
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  // Record a partial payment — remaining balance will carry forward to next month
+  Future<String?> recordPartialPayment(
+    String rentId, {
+    required double paidAmount,
+    String? notes,
+  }) async {
+    try {
+      final doc = await _firestore.collection('rent_payments').doc(rentId).get();
+      if (!doc.exists) return 'Record not found';
+      final rent = RentPaymentModel.fromMap(doc.data()!, rentId);
+
+      if (paidAmount <= 0) return 'Paid amount must be greater than 0';
+      if (paidAmount >= rent.amount) {
+        // Treat as full payment
+        return markAsPaid(rentId, notes: notes);
+      }
+
+      final remaining = rent.amount - paidAmount;
+
+      await _firestore.collection('rent_payments').doc(rentId).update({
+        'status': RentStatus.partiallyPaid.name,
+        'paidAmount': paidAmount,
+        'paidDate': Timestamp.fromDate(DateTime.now()),
+        if (notes != null && notes.isNotEmpty) 'notes': notes,
+      });
+
+      final tenantId = doc.data()?['tenantId'];
+      final monthLabel = _monthLabel(doc.data()?['month'], doc.data()?['year']);
+
+      if (tenantId != null) {
+        await _firestore.collection('notifications').add({
+          'userId': tenantId,
+          'title': 'Partial Payment Recorded',
+          'message':
+              '₹${paidAmount.toStringAsFixed(0)} received for $monthLabel. '
+              'Remaining ₹${remaining.toStringAsFixed(0)} will be added to next month\'s rent.',
+          'type': 'rent_partial',
           'createdAt': DateTime.now().toIso8601String(),
           'isRead': false,
         });

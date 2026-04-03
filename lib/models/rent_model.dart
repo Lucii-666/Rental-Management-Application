@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum RentStatus { pending, paid, overdue }
+enum RentStatus { pending, paid, overdue, partiallyPaid }
 
 class RentPaymentModel {
   final String id;
@@ -10,7 +10,10 @@ class RentPaymentModel {
   final String tenantId;
   final String tenantName;
   final String ownerId;
-  final double amount;
+  final double amount;        // Total amount due this month (base + carry forward from last month)
+  final double baseAmount;    // Original rent amount from room settings
+  final double carryForward;  // Unpaid amount carried forward from a previous month
+  final double paidAmount;    // How much was actually paid (for partial payments)
   final DateTime dueDate;
   final DateTime? paidDate;
   final RentStatus status;
@@ -27,13 +30,19 @@ class RentPaymentModel {
     required this.tenantName,
     required this.ownerId,
     required this.amount,
+    double? baseAmount,
+    this.carryForward = 0,
+    this.paidAmount = 0,
     required this.dueDate,
     this.paidDate,
     this.status = RentStatus.pending,
     required this.month,
     required this.year,
     this.notes,
-  });
+  }) : baseAmount = baseAmount ?? amount;
+
+  /// Amount still owed after a partial payment
+  double get balance => amount - paidAmount;
 
   String get monthLabel {
     const months = [
@@ -52,6 +61,9 @@ class RentPaymentModel {
       'tenantName': tenantName,
       'ownerId': ownerId,
       'amount': amount,
+      'baseAmount': baseAmount,
+      'carryForward': carryForward,
+      'paidAmount': paidAmount,
       'dueDate': Timestamp.fromDate(dueDate),
       'paidDate': paidDate != null ? Timestamp.fromDate(paidDate!) : null,
       'status': status.name,
@@ -62,6 +74,7 @@ class RentPaymentModel {
   }
 
   factory RentPaymentModel.fromMap(Map<String, dynamic> map, String docId) {
+    final amount = (map['amount'] ?? 0.0).toDouble();
     return RentPaymentModel(
       id: docId,
       propertyId: map['propertyId'] ?? '',
@@ -70,7 +83,10 @@ class RentPaymentModel {
       tenantId: map['tenantId'] ?? '',
       tenantName: map['tenantName'] ?? '',
       ownerId: map['ownerId'] ?? '',
-      amount: (map['amount'] ?? 0.0).toDouble(),
+      amount: amount,
+      baseAmount: (map['baseAmount'] ?? amount).toDouble(),
+      carryForward: (map['carryForward'] ?? 0.0).toDouble(),
+      paidAmount: (map['paidAmount'] ?? 0.0).toDouble(),
       dueDate: (map['dueDate'] is Timestamp)
           ? (map['dueDate'] as Timestamp).toDate()
           : DateTime.parse(map['dueDate']),
@@ -86,29 +102,6 @@ class RentPaymentModel {
       month: map['month'] ?? 1,
       year: map['year'] ?? DateTime.now().year,
       notes: map['notes'],
-    );
-  }
-
-  RentPaymentModel copyWith({
-    RentStatus? status,
-    DateTime? paidDate,
-    String? notes,
-  }) {
-    return RentPaymentModel(
-      id: id,
-      propertyId: propertyId,
-      roomId: roomId,
-      roomNumber: roomNumber,
-      tenantId: tenantId,
-      tenantName: tenantName,
-      ownerId: ownerId,
-      amount: amount,
-      dueDate: dueDate,
-      paidDate: paidDate ?? this.paidDate,
-      status: status ?? this.status,
-      month: month,
-      year: year,
-      notes: notes ?? this.notes,
     );
   }
 }

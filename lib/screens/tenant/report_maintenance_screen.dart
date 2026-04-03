@@ -121,6 +121,12 @@ class _ReportMaintenanceScreenState extends State<ReportMaintenanceScreen> {
               decoration: AppTheme.inputDecoration('Title (e.g., Leaking Tap)', Icons.title),
             ),
             const SizedBox(height: 20),
+            TextField(
+              controller: _descController,
+              maxLines: 3,
+              decoration: AppTheme.inputDecoration('Describe the issue in detail...', Icons.description),
+            ),
+            const SizedBox(height: 20),
             GestureDetector(
               onTap: _pickImage,
               child: Container(

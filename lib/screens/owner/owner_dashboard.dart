@@ -10,6 +10,7 @@ import 'add_property_screen.dart';
 import 'property_details_screen.dart';
 import 'requests_hub_screen.dart';
 import 'maintenance_dashboard.dart';
+import 'document_verification_screen.dart';
 import 'tenant_history_screen.dart';
 import 'rent_collection_screen.dart';
 import '../shared/profile_screen.dart';
@@ -204,6 +205,8 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                   ),
                 const SizedBox(height: 32),
                 _buildRentCollectionShortcut(),
+                const SizedBox(height: 16),
+                _buildDocumentVerificationShortcut(),
               ],
             ),
           );
@@ -402,6 +405,52 @@ class _OwnerDashboardState extends State<OwnerDashboard> {
                       style: TextStyle(
                           color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
                   Text('Track payments, mark as paid & send reminders',
+                      style: TextStyle(color: Colors.white70, fontSize: 12)),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDocumentVerificationShortcut() {
+    return InkWell(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const DocumentVerificationScreen()),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.teal, Colors.teal.withValues(alpha: 0.7)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.teal.withValues(alpha: 0.3),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.verified_user_outlined, color: Colors.white, size: 32),
+            SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Document Verification',
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                  Text('Review & verify tenant identity documents',
                       style: TextStyle(color: Colors.white70, fontSize: 12)),
                 ],
               ),

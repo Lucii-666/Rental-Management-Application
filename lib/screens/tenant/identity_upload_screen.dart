@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/identity_model.dart';
+import '../../models/notification_model.dart';
 import '../../utils/app_theme.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../services/storage_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/notification_service.dart';
 import 'dart:io';
 
 class IdentityUploadScreen extends StatefulWidget {
@@ -41,28 +44,70 @@ class _IdentityUploadScreenState extends State<IdentityUploadScreen> {
     }
 
     setState(() => _isUploading = true);
-    
+
     final authService = Provider.of<AuthService>(context, listen: false);
     final storageService = Provider.of<StorageService>(context, listen: false);
+    final notificationService = Provider.of<NotificationService>(context, listen: false);
     final scout = ScaffoldMessenger.of(context);
     final nav = Navigator.of(context);
+    final user = authService.userModel;
+    final uid = authService.currentUser!.uid;
 
     try {
+      // 1. Upload image to Supabase Storage
       final downloadUrl = await storageService.uploadIdentityDoc(
-        authService.currentUser!.uid,
+        uid,
         _selectedType.name,
         _selectedImage!,
       );
-      
+
       if (!mounted) return;
 
       if (downloadUrl != null) {
-        // Mock verification success for now, but save the URL
-        await authService.updateProfile(isVerified: true); 
-        
+        // 2. Save identity document record to Firestore with status: pending
+        final identityDoc = IdentityModel(
+          userId: uid,
+          userName: user?.name ?? '',
+          docType: _selectedType,
+          fileUrl: downloadUrl,
+          status: IdentityStatus.pending,
+          uploadedAt: DateTime.now(),
+        );
+
+        await FirebaseFirestore.instance
+            .collection('identity_documents')
+            .add(identityDoc.toMap());
+
+        // 3. Notify the property owner (if tenant is linked to a property)
+        if (user?.propertyId != null && user!.propertyId!.isNotEmpty) {
+          final propDoc = await FirebaseFirestore.instance
+              .collection('properties')
+              .doc(user.propertyId)
+              .get();
+
+          if (propDoc.exists) {
+            final ownerId = propDoc.data()?['ownerId'] as String?;
+            if (ownerId != null) {
+              await notificationService.sendNotification(
+                NotificationModel(
+                  id: '',
+                  userId: ownerId,
+                  title: 'Document Verification Request',
+                  message: '${user.name} has uploaded a ${_selectedType.name.toUpperCase()} document for verification.',
+                  type: 'identity_verification',
+                  createdAt: DateTime.now(),
+                ),
+              );
+            }
+          }
+        }
+
         if (mounted) {
           scout.showSnackBar(
-            const SnackBar(content: Text('Identity document submitted and verified!')),
+            const SnackBar(
+              content: Text('Document submitted for verification! Your owner will review it.'),
+              backgroundColor: Colors.green,
+            ),
           );
           nav.pop();
         }
@@ -82,72 +127,156 @@ class _IdentityUploadScreenState extends State<IdentityUploadScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context);
+    final uid = authService.currentUser?.uid;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Verify Identity')),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Government ID Verification',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Please upload a clear photo of your government-issued ID for verification.',
-              style: TextStyle(color: AppTheme.subtext(context)),
-            ),
-            const SizedBox(height: 32),
-            const Text('Select Document Type', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<IdentityType>(
-              initialValue: _selectedType,
-              decoration: const InputDecoration(border: OutlineInputBorder()),
-              items: IdentityType.values.map((type) {
-                return DropdownMenuItem(
-                  value: type,
-                  child: Text(type.name.toUpperCase()),
-                );
-              }).toList(),
-              onChanged: (val) {
-                if (val != null) setState(() => _selectedType = val);
-              },
-            ),
-            const SizedBox(height: 32),
-            GestureDetector(
-              onTap: _pickImage,
-              child: Container(
-                height: 200,
-                decoration: BoxDecoration(
-                  color: AppTheme.surface(context),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.dividerColor(context), style: BorderStyle.solid),
-                  image: _selectedImage != null 
-                    ? DecorationImage(image: FileImage(_selectedImage!), fit: BoxFit.cover)
-                    : null,
-                ),
-                child: _selectedImage == null ? const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.add_a_photo_outlined, size: 48, color: Colors.grey),
-                    SizedBox(height: 12),
-                    Text('Tap to upload photo', style: TextStyle(color: Colors.grey)),
-                  ],
-                ) : null,
+      body: Column(
+        children: [
+          // Show current verification status
+          if (uid != null) _buildStatusBanner(uid),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Government ID Verification',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.text(context)),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Upload a clear photo of your government-issued ID. Your property owner will review and verify it.',
+                    style: TextStyle(color: AppTheme.subtext(context)),
+                  ),
+                  const SizedBox(height: 32),
+                  Text('Select Document Type', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.text(context))),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<IdentityType>(
+                    initialValue: _selectedType,
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                    items: IdentityType.values.map((type) {
+                      return DropdownMenuItem(
+                        value: type,
+                        child: Text(type.name.toUpperCase()),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) setState(() => _selectedType = val);
+                    },
+                  ),
+                  const SizedBox(height: 32),
+                  GestureDetector(
+                    onTap: _pickImage,
+                    child: Container(
+                      height: 200,
+                      decoration: BoxDecoration(
+                        color: AppTheme.surface(context),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.dividerColor(context)),
+                        image: _selectedImage != null
+                            ? DecorationImage(image: FileImage(_selectedImage!), fit: BoxFit.cover)
+                            : null,
+                      ),
+                      child: _selectedImage == null
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add_a_photo_outlined, size: 48, color: AppTheme.subtext(context)),
+                                const SizedBox(height: 12),
+                                Text('Tap to capture photo', style: TextStyle(color: AppTheme.subtext(context))),
+                              ],
+                            )
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  ElevatedButton(
+                    onPressed: _isUploading ? null : _handleUpload,
+                    child: _isUploading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text('Submit for Verification'),
+                  ),
+                  const SizedBox(height: 20),
+                ],
               ),
             ),
-            const Spacer(),
-            ElevatedButton(
-              onPressed: _isUploading ? null : _handleUpload,
-              child: _isUploading 
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text('Submit for Verification'),
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildStatusBanner(String uid) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('identity_documents')
+          .where('userId', isEqualTo: uid)
+          .orderBy('uploadedAt', descending: true)
+          .limit(1)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const SizedBox.shrink();
+
+        final doc = IdentityModel.fromMap(
+          snapshot.data!.docs.first.data() as Map<String, dynamic>,
+          snapshot.data!.docs.first.id,
+        );
+
+        Color statusColor;
+        IconData statusIcon;
+        String statusText;
+
+        switch (doc.status) {
+          case IdentityStatus.pending:
+            statusColor = Colors.orange;
+            statusIcon = Icons.hourglass_top_rounded;
+            statusText = 'Your ${doc.docType.name.toUpperCase()} is under review';
+          case IdentityStatus.verified:
+            statusColor = Colors.green;
+            statusIcon = Icons.verified_rounded;
+            statusText = 'Your ${doc.docType.name.toUpperCase()} has been verified';
+          case IdentityStatus.rejected:
+            statusColor = Colors.red;
+            statusIcon = Icons.cancel_rounded;
+            statusText = 'Your ${doc.docType.name.toUpperCase()} was rejected';
+        }
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          color: statusColor.withValues(alpha: 0.1),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(statusIcon, color: statusColor, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      statusText,
+                      style: TextStyle(color: statusColor, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+              if (doc.status == IdentityStatus.rejected && doc.rejectionReason != null) ...[
+                const SizedBox(height: 6),
+                Padding(
+                  padding: const EdgeInsets.only(left: 30),
+                  child: Text(
+                    'Reason: ${doc.rejectionReason}',
+                    style: TextStyle(color: statusColor.withValues(alpha: 0.8), fontSize: 13),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }

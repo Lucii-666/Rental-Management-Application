@@ -6,6 +6,7 @@ import '../../services/auth_service.dart';
 import '../../services/property_service.dart';
 import '../../services/rent_service.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/receipt_generator.dart';
 import 'package:intl/intl.dart';
 
 class RentCollectionScreen extends StatefulWidget {
@@ -109,9 +110,11 @@ class _RentCollectionScreenState extends State<RentCollectionScreen> {
 
   Widget _buildSummaryBar(List<RentPaymentModel> records) {
     final total = records.fold<double>(0, (sum, r) => sum + r.amount);
-    final collected = records
-        .where((r) => r.status == RentStatus.paid)
-        .fold<double>(0, (sum, r) => sum + r.amount);
+    final collected = records.fold<double>(0, (sum, r) {
+      if (r.status == RentStatus.paid) return sum + r.amount;
+      if (r.status == RentStatus.partiallyPaid) return sum + r.paidAmount;
+      return sum;
+    });
     final pending = total - collected;
 
     return Container(
@@ -165,17 +168,27 @@ class _RentCollectionScreenState extends State<RentCollectionScreen> {
   }
 
   Widget _buildRentCard(RentPaymentModel rent, RentService rentService) {
-    final statusColor = {
-      RentStatus.paid: Colors.green,
-      RentStatus.pending: Colors.orange,
-      RentStatus.overdue: Colors.red,
-    }[rent.status]!;
+    Color statusColor;
+    String statusLabel;
 
-    final statusLabel = {
-      RentStatus.paid: 'Paid',
-      RentStatus.pending: 'Pending',
-      RentStatus.overdue: 'Overdue',
-    }[rent.status]!;
+    switch (rent.status) {
+      case RentStatus.paid:
+        statusColor = Colors.green;
+        statusLabel = 'Paid';
+      case RentStatus.partiallyPaid:
+        statusColor = Colors.blue;
+        statusLabel = 'Partial';
+      case RentStatus.overdue:
+        statusColor = Colors.red;
+        statusLabel = 'Overdue';
+      case RentStatus.pending:
+        statusColor = Colors.orange;
+        statusLabel = 'Pending';
+    }
+
+    final isActionable = rent.status == RentStatus.pending ||
+        rent.status == RentStatus.overdue;
+    final isPartial = rent.status == RentStatus.partiallyPaid;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -222,11 +235,22 @@ class _RentCollectionScreenState extends State<RentCollectionScreen> {
             ],
           ),
           const SizedBox(height: 12),
+          // Amount + carry forward breakdown
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('₹${rent.amount.toStringAsFixed(0)}',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.secondary(context))),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('₹${rent.amount.toStringAsFixed(0)}',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.secondary(context))),
+                  if (rent.carryForward > 0)
+                    Text(
+                      '₹${rent.baseAmount.toStringAsFixed(0)} base + ₹${rent.carryForward.toStringAsFixed(0)} due',
+                      style: TextStyle(color: Colors.orange, fontSize: 11),
+                    ),
+                ],
+              ),
               Text(
                 rent.status == RentStatus.paid
                     ? 'Paid on ${DateFormat('dd MMM').format(rent.paidDate!)}'
@@ -235,7 +259,44 @@ class _RentCollectionScreenState extends State<RentCollectionScreen> {
               ),
             ],
           ),
-          if (rent.status != RentStatus.paid) ...[
+          // Partial payment info
+          if (isPartial) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.blue.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.blue, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Paid ₹${rent.paidAmount.toStringAsFixed(0)} — ₹${rent.balance.toStringAsFixed(0)} carries to next month',
+                      style: const TextStyle(color: Colors.blue, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          // Receipt button for paid / partially paid
+          if (rent.status == RentStatus.paid || rent.status == RentStatus.partiallyPaid) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => ReceiptGenerator.shareReceipt(rent),
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+              label: const Text('Download Receipt'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.primary(context),
+                side: BorderSide(color: AppTheme.primary(context)),
+                minimumSize: const Size(double.infinity, 40),
+              ),
+            ),
+          ],
+          if (isActionable) ...[
             const SizedBox(height: 12),
             Row(
               children: [
@@ -251,12 +312,25 @@ class _RentCollectionScreenState extends State<RentCollectionScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _recordPartialPayment(rent, rentService),
+                    icon: const Icon(Icons.payments_outlined, size: 16),
+                    label: const Text('Partial'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.blue,
+                      side: const BorderSide(color: Colors.blue),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () => _markAsPaid(rent, rentService),
                     icon: const Icon(Icons.check_circle_outline, size: 16),
-                    label: const Text('Mark Paid'),
+                    label: const Text('Paid'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
@@ -390,6 +464,93 @@ class _RentCollectionScreenState extends State<RentCollectionScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(error ?? 'Rent marked as paid!'),
           backgroundColor: error != null ? Colors.red : Colors.green,
+        ));
+      }
+    }
+  }
+
+  Future<void> _recordPartialPayment(RentPaymentModel rent, RentService rentService) async {
+    final amountController = TextEditingController();
+    final notesController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.card(context),
+        title: Text('Partial Payment — ${rent.tenantName}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Total due: ₹${rent.amount.toStringAsFixed(0)}',
+              style: TextStyle(color: AppTheme.subtext(context), fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Unpaid balance will be added to next month\'s rent.',
+              style: TextStyle(color: Colors.orange, fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: amountController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Amount Received (₹)',
+                prefixText: '₹ ',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: notesController,
+              decoration: const InputDecoration(
+                labelText: 'Notes (optional)',
+                hintText: 'e.g. Cash partial, UPI...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+            child: const Text('Record', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final paid = double.tryParse(amountController.text.trim());
+      if (paid == null || paid <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter a valid amount'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+
+      final remaining = rent.amount - paid;
+      final error = await rentService.recordPartialPayment(
+        rent.id,
+        paidAmount: paid,
+        notes: notesController.text.trim(),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error != null
+              ? error
+              : remaining > 0
+                  ? 'Recorded ₹${paid.toStringAsFixed(0)} paid. ₹${remaining.toStringAsFixed(0)} carries to next month.'
+                  : 'Full amount paid!'),
+          backgroundColor: error != null ? Colors.red : Colors.blue,
         ));
       }
     }

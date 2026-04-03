@@ -6,7 +6,7 @@ import '../../utils/app_theme.dart';
 import 'join_property_screen.dart';
 import 'identity_upload_screen.dart';
 import 'property_explorer_screen.dart';
-import 'report_maintenance_screen.dart';
+import 'my_maintenance_screen.dart';
 import '../../models/room_request_model.dart';
 import '../../services/property_service.dart';
 import '../shared/profile_screen.dart';
@@ -132,13 +132,13 @@ class _TenantDashboardState extends State<TenantDashboard> {
             _buildOptionCard(
               context,
               'Maintenance',
-              'Report an issue in your room.',
+              'View your requests or report a new issue.',
               Icons.build_circle_outlined,
               Colors.red,
               () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const ReportMaintenanceScreen()),
+                  MaterialPageRoute(builder: (context) => const MyMaintenanceScreen()),
                 );
               },
             ),
@@ -156,21 +156,27 @@ class _TenantDashboardState extends State<TenantDashboard> {
       builder: (context, snapshot) {
         final rent = snapshot.data;
 
-        final statusColor = rent == null
-            ? Colors.grey
-            : {
-                RentStatus.paid: Colors.green,
-                RentStatus.pending: Colors.orange,
-                RentStatus.overdue: Colors.red,
-              }[rent.status]!;
-
-        final statusLabel = rent == null
-            ? 'No Record'
-            : {
-                RentStatus.paid: 'Paid',
-                RentStatus.pending: 'Pending',
-                RentStatus.overdue: 'Overdue',
-              }[rent.status]!;
+        Color statusColor;
+        String statusLabel;
+        if (rent == null) {
+          statusColor = Colors.grey;
+          statusLabel = 'No Record';
+        } else {
+          switch (rent.status) {
+            case RentStatus.paid:
+              statusColor = Colors.green;
+              statusLabel = 'Paid';
+            case RentStatus.partiallyPaid:
+              statusColor = Colors.blue;
+              statusLabel = 'Partial';
+            case RentStatus.overdue:
+              statusColor = Colors.red;
+              statusLabel = 'Overdue';
+            case RentStatus.pending:
+              statusColor = Colors.orange;
+              statusLabel = 'Pending';
+          }
+        }
 
         return InkWell(
           onTap: () => Navigator.push(
@@ -228,11 +234,11 @@ class _TenantDashboardState extends State<TenantDashboard> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        rent.status == RentStatus.paid ? 'Paid On' : 'Due Date',
+                        (rent.status == RentStatus.paid || rent.status == RentStatus.partiallyPaid) ? 'Paid On' : 'Due Date',
                         style: TextStyle(color: AppTheme.subtext(context)),
                       ),
                       Text(
-                        rent.status == RentStatus.paid && rent.paidDate != null
+                        (rent.status == RentStatus.paid || rent.status == RentStatus.partiallyPaid) && rent.paidDate != null
                             ? DateFormat('dd MMM yyyy').format(rent.paidDate!)
                             : DateFormat('dd MMM yyyy').format(rent.dueDate),
                         style: TextStyle(color: statusColor, fontWeight: FontWeight.bold),
