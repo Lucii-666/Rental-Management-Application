@@ -5,18 +5,43 @@ import '../models/room_model.dart';
 import '../models/join_request_model.dart';
 import '../models/maintenance_model.dart';
 import '../models/room_request_model.dart';
+import 'push_notification_service.dart';
 import 'storage_service.dart';
 import 'dart:io';
 import 'dart:math';
 
 class PropertyService extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+  final PushNotificationService _push = PushNotificationService();
+
   final List<PropertyModel> _properties = [];
   List<PropertyModel> get properties => _properties;
-  
+
   final bool _isLoading = false;
   bool get isLoading => _isLoading;
+
+  // ── Internal helper: save in-app notification + fire push ─────────────────
+  Future<void> _notify({
+    required String userId,
+    required String title,
+    required String message,
+    required String type,
+  }) async {
+    await _firestore.collection('notifications').add({
+      'userId': userId,
+      'title': title,
+      'message': message,
+      'type': type,
+      'createdAt': DateTime.now().toIso8601String(),
+      'isRead': false,
+    });
+    await _push.sendPushNotification(
+      targetUserId: userId,
+      title: title,
+      body: message,
+      data: {'type': type},
+    );
+  }
 
   // Stream of properties for a specific owner
   Stream<List<PropertyModel>> getPropertiesStream(String ownerId) {
@@ -58,7 +83,7 @@ class PropertyService extends ChangeNotifier {
   Future<void> updateJoinCode(String propertyId, int expiryHours) async {
     final code = generateJoinCode();
     final expiry = DateTime.now().add(Duration(hours: expiryHours));
-    
+
     await _firestore.collection('properties').doc(propertyId).update({
       'joinCode': code,
       'joinCodeExpiry': expiry.toIso8601String(),
@@ -96,7 +121,8 @@ class PropertyService extends ChangeNotifier {
     final doc = snapshot.docs.first;
     final property = PropertyModel.fromMap(doc.data(), doc.id);
 
-    if (property.joinCodeExpiry != null && property.joinCodeExpiry!.isBefore(DateTime.now())) {
+    if (property.joinCodeExpiry != null &&
+        property.joinCodeExpiry!.isBefore(DateTime.now())) {
       return null;
     }
 
@@ -124,6 +150,14 @@ class PropertyService extends ChangeNotifier {
         'ownerId': ownerId,
       });
 
+      // Notify the owner about the new join request
+      await _notify(
+        userId: ownerId,
+        title: 'New Join Request',
+        message: '$tenantName has requested to join $propertyName.',
+        type: 'join_request',
+      );
+
       return null;
     } catch (e) {
       return e.toString();
@@ -147,20 +181,35 @@ class PropertyService extends ChangeNotifier {
 
   Future<void> handleJoinRequest(String requestId, bool approve) async {
     final status = approve ? 'approved' : 'rejected';
-    await _firestore.collection('join_requests').doc(requestId).update({'status': status});
-    
-    // If approved, we might want to add the tenant to a "tenants" collection or property sub-collection
+    await _firestore
+        .collection('join_requests')
+        .doc(requestId)
+        .update({'status': status});
+
+    final requestDoc =
+        await _firestore.collection('join_requests').doc(requestId).get();
+    if (!requestDoc.exists) return;
+
+    final data = requestDoc.data()!;
+    final tenantId = data['tenantId'] as String?;
+    if (tenantId == null) return;
+
     if (approve) {
-      final requestDoc = await _firestore.collection('join_requests').doc(requestId).get();
-      final data = requestDoc.data()!;
-      final tenantId = data['tenantId'];
       final propertyId = data['propertyId'];
-      
+
       // 1. Update User Profile with PropertyId
-      await _firestore.collection('users').doc(tenantId).update({'propertyId': propertyId});
+      await _firestore
+          .collection('users')
+          .doc(tenantId)
+          .update({'propertyId': propertyId});
 
       // 2. Add to Property Tenants list
-      await _firestore.collection('properties').doc(propertyId).collection('tenants').doc(tenantId).set({
+      await _firestore
+          .collection('properties')
+          .doc(propertyId)
+          .collection('tenants')
+          .doc(tenantId)
+          .set({
         'name': data['tenantName'],
         'phone': data['tenantPhone'] ?? '',
         'joinedAt': DateTime.now().toIso8601String(),
@@ -168,36 +217,27 @@ class PropertyService extends ChangeNotifier {
         'propertyId': propertyId,
       });
 
-      // 3. Send notification to tenant
-      await _firestore.collection('notifications').add({
-        'userId': tenantId,
-        'title': 'Join Request Approved',
-        'message': 'You have successfully joined the property!',
-        'type': 'join_request',
-        'createdAt': DateTime.now().toIso8601String(),
-        'isRead': false,
-      });
+      // 3. Notify tenant — approval + push
+      await _notify(
+        userId: tenantId,
+        title: 'Join Request Approved ✓',
+        message: 'You have successfully joined ${data['propertyName']}!',
+        type: 'join_request',
+      );
     } else {
-      // Rejection logic: Send notification
-      final requestDoc = await _firestore.collection('join_requests').doc(requestId).get();
-      if (requestDoc.exists) {
-        final tenantId = requestDoc.data()?['tenantId'];
-        if (tenantId != null) {
-          await _firestore.collection('notifications').add({
-            'userId': tenantId,
-            'title': 'Join Request Rejected',
-            'message': 'Your request to join the property was declined.',
-            'type': 'join_request',
-            'createdAt': DateTime.now().toIso8601String(),
-            'isRead': false,
-          });
-        }
-      }
+      // Notify tenant — rejection + push
+      await _notify(
+        userId: tenantId,
+        title: 'Join Request Rejected',
+        message: 'Your request to join ${data['propertyName']} was declined.',
+        type: 'join_request',
+      );
     }
   }
 
   // Maintenance Request Management
-  Stream<List<MaintenanceRequestModel>> getTenantMaintenanceRequestsStream(String tenantId) {
+  Stream<List<MaintenanceRequestModel>> getTenantMaintenanceRequestsStream(
+      String tenantId) {
     return _firestore
         .collection('maintenance_requests')
         .where('tenantId', isEqualTo: tenantId)
@@ -208,7 +248,8 @@ class PropertyService extends ChangeNotifier {
             .toList());
   }
 
-  Stream<List<MaintenanceRequestModel>> getOwnerMaintenanceRequestsStream(String ownerId) {
+  Stream<List<MaintenanceRequestModel>> getOwnerMaintenanceRequestsStream(
+      String ownerId) {
     return _firestore
         .collection('maintenance_requests')
         .where('ownerId', isEqualTo: ownerId)
@@ -220,42 +261,66 @@ class PropertyService extends ChangeNotifier {
   }
 
   Future<void> updateMaintenanceStatus(String requestId, String status) async {
-    final doc = await _firestore.collection('maintenance_requests').doc(requestId).get();
-    if (doc.exists) {
-      final tenantId = doc.data()?['tenantId'];
-      final title = doc.data()?['title'];
-      
-      await _firestore.collection('maintenance_requests').doc(requestId).update({'status': status});
+    final doc = await _firestore
+        .collection('maintenance_requests')
+        .doc(requestId)
+        .get();
+    if (!doc.exists) return;
 
-      if (tenantId != null) {
-        await _firestore.collection('notifications').add({
-          'userId': tenantId,
-          'title': 'Maintenance Update',
-          'message': 'Your request "$title" is now: $status.',
-          'type': 'maintenance_update',
-          'createdAt': DateTime.now().toIso8601String(),
-          'isRead': false,
-        });
-      }
+    final tenantId = doc.data()?['tenantId'] as String?;
+    final title = doc.data()?['title'] ?? 'your request';
+    final ownerId = doc.data()?['ownerId'] as String?;
+
+    await _firestore
+        .collection('maintenance_requests')
+        .doc(requestId)
+        .update({'status': status});
+
+    if (tenantId != null) {
+      await _notify(
+        userId: tenantId,
+        title: 'Maintenance Update',
+        message: 'Your request "$title" status changed to: $status.',
+        type: 'maintenance_update',
+      );
+    }
+
+    // Also notify the owner if the tenant submitted the request (status = submitted → owner notified)
+    if (status == 'pending' && ownerId != null) {
+      await _notify(
+        userId: ownerId,
+        title: 'New Maintenance Request',
+        message: 'A new maintenance request "$title" has been submitted.',
+        type: 'maintenance_update',
+      );
     }
   }
 
-  Future<String?> submitMaintenanceRequest(MaintenanceRequestModel request, {File? imageFile}) async {
+  Future<String?> submitMaintenanceRequest(MaintenanceRequestModel request,
+      {File? imageFile}) async {
     try {
       final docRef = _firestore.collection('maintenance_requests').doc();
-      
+
       String? imageUrl;
       if (imageFile != null) {
-        final storageService = StorageService(); // Or inject via constructor, but this is fine for a one-off ref
+        final storageService = StorageService();
         imageUrl = await storageService.uploadMaintenanceImage(docRef.id, imageFile);
       }
 
-      final finalRequest = request.copyWith(
-        id: docRef.id,
-        imageUrl: imageUrl,
-      );
-      
+      final finalRequest = request.copyWith(id: docRef.id, imageUrl: imageUrl);
       await docRef.set(finalRequest.toMap());
+
+      // Notify the owner about the new maintenance request
+      if (request.ownerId.isNotEmpty) {
+        await _notify(
+          userId: request.ownerId,
+          title: 'New Maintenance Request',
+          message:
+              '${request.tenantName} submitted a maintenance request: "${request.title}".',
+          type: 'maintenance_update',
+        );
+      }
+
       return null;
     } catch (e) {
       return e.toString();
@@ -268,38 +333,38 @@ class PropertyService extends ChangeNotifier {
     int rooms = 0;
     int tenants = 0;
 
-    final propsSnapshot = await _firestore.collection('properties').where('ownerId', isEqualTo: ownerId).get();
+    final propsSnapshot = await _firestore
+        .collection('properties')
+        .where('ownerId', isEqualTo: ownerId)
+        .get();
     properties = propsSnapshot.docs.length;
 
     for (var doc in propsSnapshot.docs) {
       final roomsSnapshot = await doc.reference.collection('rooms').get();
       rooms += roomsSnapshot.docs.length;
-      
+
       final tenantsSnapshot = await doc.reference.collection('tenants').get();
       tenants += tenantsSnapshot.docs.length;
     }
 
-    return {
-      'properties': properties,
-      'rooms': rooms,
-      'tenants': tenants,
-    };
+    return {'properties': properties, 'rooms': rooms, 'tenants': tenants};
   }
 
   // Tenant Management
-  Stream<List<Map<String, dynamic>>> getRoomTenantsStream(String propertyId, String roomId) {
+  Stream<List<Map<String, dynamic>>> getRoomTenantsStream(
+      String propertyId, String roomId) {
     return _firestore
         .collection('properties')
         .doc(propertyId)
         .collection('tenants')
         .where('roomId', isEqualTo: roomId)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => {...doc.data(), 'id': doc.id})
-            .toList());
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => {...doc.data(), 'id': doc.id}).toList());
   }
 
-  Future<void> removeTenantFromRoom(String propertyId, String roomId, String tenantId, String reason) async {
+  Future<void> removeTenantFromRoom(
+      String propertyId, String roomId, String tenantId, String reason) async {
     final tenantDoc = await _firestore
         .collection('properties')
         .doc(propertyId)
@@ -310,7 +375,8 @@ class PropertyService extends ChangeNotifier {
     if (!tenantDoc.exists) return;
 
     final tenantData = tenantDoc.data()!;
-    final propertyDoc = await _firestore.collection('properties').doc(propertyId).get();
+    final propertyDoc =
+        await _firestore.collection('properties').doc(propertyId).get();
     final propertyName = propertyDoc.data()?['name'] ?? 'Unknown Property';
 
     // 1. Add to History
@@ -324,7 +390,7 @@ class PropertyService extends ChangeNotifier {
       'ownerId': propertyDoc.data()?['ownerId'],
     });
 
-    // 2. Decrement Room Occupancy — room is now vacant
+    // 2. Decrement Room Occupancy
     final roomDoc = await _firestore
         .collection('properties')
         .doc(propertyId)
@@ -334,40 +400,40 @@ class PropertyService extends ChangeNotifier {
 
     if (roomDoc.exists) {
       final currentOcc = roomDoc.data()?['currentOccupancy'] ?? 1;
-      await roomDoc.reference.update({'currentOccupancy': max(0, currentOcc - 1)});
+      await roomDoc.reference
+          .update({'currentOccupancy': max(0, currentOcc - 1)});
     }
 
-    // 3. Clear user's propertyId and roomId so dashboard shows "not joined"
+    // 3. Clear user's propertyId and roomId
     await _firestore.collection('users').doc(tenantId).update({
       'propertyId': null,
       'roomId': null,
     });
 
-    // 4. Notify tenant of removal
-    await _firestore.collection('notifications').add({
-      'userId': tenantId,
-      'title': 'Removed from Property',
-      'message': reason.isNotEmpty
-          ? 'You have been removed from $propertyName. Reason: $reason'
-          : 'You have been removed from $propertyName.',
-      'type': 'general',
-      'createdAt': DateTime.now().toIso8601String(),
-      'isRead': false,
-    });
+    // 4. Notify tenant of removal + push
+    final msg = reason.isNotEmpty
+        ? 'You have been removed from $propertyName. Reason: $reason'
+        : 'You have been removed from $propertyName.';
+    await _notify(
+      userId: tenantId,
+      title: 'Removed from Property',
+      message: msg,
+      type: 'general',
+    );
 
     // 5. Remove from Active Tenants
     await tenantDoc.reference.delete();
   }
 
-  Stream<List<Map<String, dynamic>>> getOwnerTenantHistoryStream(String ownerId) {
+  Stream<List<Map<String, dynamic>>> getOwnerTenantHistoryStream(
+      String ownerId) {
     return _firestore
         .collection('tenant_history')
         .where('ownerId', isEqualTo: ownerId)
         .orderBy('leftAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => {...doc.data(), 'id': doc.id})
-            .toList());
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => {...doc.data(), 'id': doc.id}).toList());
   }
 
   Future<String?> sendRoomRequest({
@@ -389,6 +455,15 @@ class PropertyService extends ChangeNotifier {
         'status': 'pending',
         'timestamp': DateTime.now().toIso8601String(),
       });
+
+      // Notify owner about room request + push
+      await _notify(
+        userId: ownerId,
+        title: 'New Room Request',
+        message: '$tenantName has requested Room $roomNumber.',
+        type: 'room_request',
+      );
+
       return null;
     } catch (e) {
       return e.toString();
@@ -408,17 +483,29 @@ class PropertyService extends ChangeNotifier {
 
   Future<void> handleRoomRequest(String requestId, bool approve) async {
     final status = approve ? 'approved' : 'rejected';
-    await _firestore.collection('room_requests').doc(requestId).update({'status': status});
+    await _firestore
+        .collection('room_requests')
+        .doc(requestId)
+        .update({'status': status});
+
+    final requestDoc =
+        await _firestore.collection('room_requests').doc(requestId).get();
+    if (!requestDoc.exists) return;
+
+    final data = requestDoc.data()!;
+    final tenantId = data['tenantId'] as String?;
+    if (tenantId == null) return;
 
     if (approve) {
-      final requestDoc = await _firestore.collection('room_requests').doc(requestId).get();
-      final data = requestDoc.data()!;
-      final tenantId = data['tenantId'];
       final propertyId = data['propertyId'];
       final roomId = data['roomId'];
+      final roomNumber = data['roomNumber'] ?? '';
 
       // 1. Update User Profile with RoomId
-      await _firestore.collection('users').doc(tenantId).update({'roomId': roomId});
+      await _firestore
+          .collection('users')
+          .doc(tenantId)
+          .update({'roomId': roomId});
 
       // 2. Update Tenant record in property sub-collection
       await _firestore
@@ -434,7 +521,7 @@ class PropertyService extends ChangeNotifier {
           .doc(propertyId)
           .collection('rooms')
           .doc(roomId);
-      
+
       await _firestore.runTransaction((transaction) async {
         final roomSnapshot = await transaction.get(roomRef);
         if (roomSnapshot.exists) {
@@ -443,31 +530,22 @@ class PropertyService extends ChangeNotifier {
         }
       });
 
-      // 4. Send notification to tenant
-      await _firestore.collection('notifications').add({
-        'userId': tenantId,
-        'title': 'Room Request Approved',
-        'message': 'You have been assigned to your requested room.',
-        'type': 'room_request',
-        'createdAt': DateTime.now().toIso8601String(),
-        'isRead': false,
-      });
+      // 4. Notify tenant — approval + push
+      await _notify(
+        userId: tenantId,
+        title: 'Room Request Approved ✓',
+        message: 'You have been assigned to Room $roomNumber.',
+        type: 'room_request',
+      );
     } else {
-      // Rejection logic: Send notification
-      final requestDoc = await _firestore.collection('room_requests').doc(requestId).get();
-      if (requestDoc.exists) {
-        final tenantId = requestDoc.data()?['tenantId'];
-        if (tenantId != null) {
-          await _firestore.collection('notifications').add({
-            'userId': tenantId,
-            'title': 'Room Request Rejected',
-            'message': 'Your room occupancy request was declined.',
-            'type': 'room_request',
-            'createdAt': DateTime.now().toIso8601String(),
-            'isRead': false,
-          });
-        }
-      }
+      // Notify tenant — rejection + push
+      final roomNumber = data['roomNumber'] ?? '';
+      await _notify(
+        userId: tenantId,
+        title: 'Room Request Rejected',
+        message: 'Your request for Room $roomNumber was declined.',
+        type: 'room_request',
+      );
     }
   }
 

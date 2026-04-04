@@ -1,9 +1,34 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/rent_model.dart';
+import 'push_notification_service.dart';
 
 class RentService extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final PushNotificationService _push = PushNotificationService();
+
+  // ── Internal helper: save in-app notification + fire push ─────────────────
+  Future<void> _notify({
+    required String userId,
+    required String title,
+    required String message,
+    required String type,
+  }) async {
+    await _firestore.collection('notifications').add({
+      'userId': userId,
+      'title': title,
+      'message': message,
+      'type': type,
+      'createdAt': DateTime.now().toIso8601String(),
+      'isRead': false,
+    });
+    await _push.sendPushNotification(
+      targetUserId: userId,
+      title: title,
+      body: message,
+      data: {'type': type},
+    );
+  }
 
   // Generate rent records for ALL tenants in a property for a given month/year.
   // Skips tenants who already have a record for that period.
@@ -68,7 +93,7 @@ class RentService extends ChangeNotifier {
               prevSnap.docs.first.id,
             );
             if (prev.status == RentStatus.partiallyPaid) {
-              carryForward = prev.balance; // = prev.amount - prev.paidAmount
+              carryForward = prev.balance;
             }
           }
 
@@ -96,6 +121,19 @@ class RentService extends ChangeNotifier {
           );
 
           await _firestore.collection('rent_payments').add(record.toMap());
+
+          // Notify tenant that rent has been generated
+          final monthLabel = _monthLabel(month, year);
+          final carryMsg = carryForward > 0
+              ? ' (includes ₹${carryForward.toStringAsFixed(0)} carry-forward)'
+              : '';
+          await _notify(
+            userId: tenantId,
+            title: 'Rent Generated',
+            message:
+                'Your rent of ₹${totalAmount.toStringAsFixed(0)} for $monthLabel is due on ${dueDate.day} $monthLabel$carryMsg.',
+            type: 'rent_generated',
+          );
         }
       }
       return null;
@@ -113,7 +151,7 @@ class RentService extends ChangeNotifier {
 
       await _firestore.collection('rent_payments').doc(rentId).update({
         'status': RentStatus.paid.name,
-        'paidAmount': rent.amount, // full amount paid
+        'paidAmount': rent.amount,
         'paidDate': Timestamp.fromDate(DateTime.now()),
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       });
@@ -122,14 +160,13 @@ class RentService extends ChangeNotifier {
       final monthLabel = _monthLabel(doc.data()?['month'], doc.data()?['year']);
 
       if (tenantId != null) {
-        await _firestore.collection('notifications').add({
-          'userId': tenantId,
-          'title': 'Rent Received',
-          'message': 'Your rent of ₹${rent.amount.toStringAsFixed(0)} for $monthLabel has been marked as paid.',
-          'type': 'rent_paid',
-          'createdAt': DateTime.now().toIso8601String(),
-          'isRead': false,
-        });
+        await _notify(
+          userId: tenantId,
+          title: 'Rent Received ✓',
+          message:
+              'Your rent of ₹${rent.amount.toStringAsFixed(0)} for $monthLabel has been marked as paid.',
+          type: 'rent_paid',
+        );
       }
       return null;
     } catch (e) {
@@ -150,7 +187,6 @@ class RentService extends ChangeNotifier {
 
       if (paidAmount <= 0) return 'Paid amount must be greater than 0';
       if (paidAmount >= rent.amount) {
-        // Treat as full payment
         return markAsPaid(rentId, notes: notes);
       }
 
@@ -167,16 +203,14 @@ class RentService extends ChangeNotifier {
       final monthLabel = _monthLabel(doc.data()?['month'], doc.data()?['year']);
 
       if (tenantId != null) {
-        await _firestore.collection('notifications').add({
-          'userId': tenantId,
-          'title': 'Partial Payment Recorded',
-          'message':
+        await _notify(
+          userId: tenantId,
+          title: 'Partial Payment Recorded',
+          message:
               '₹${paidAmount.toStringAsFixed(0)} received for $monthLabel. '
               'Remaining ₹${remaining.toStringAsFixed(0)} will be added to next month\'s rent.',
-          'type': 'rent_partial',
-          'createdAt': DateTime.now().toIso8601String(),
-          'isRead': false,
-        });
+          type: 'rent_partial',
+        );
       }
       return null;
     } catch (e) {
@@ -194,14 +228,14 @@ class RentService extends ChangeNotifier {
     final monthLabel = _monthLabel(data['month'], data['year']);
     final amount = data['amount'];
 
-    await _firestore.collection('notifications').add({
-      'userId': tenantId,
-      'title': 'Rent Reminder',
-      'message': 'Your rent of ₹$amount for $monthLabel is due. Please pay on time.',
-      'type': 'rent_reminder',
-      'createdAt': DateTime.now().toIso8601String(),
-      'isRead': false,
-    });
+    if (tenantId != null) {
+      await _notify(
+        userId: tenantId,
+        title: 'Rent Reminder',
+        message: 'Your rent of ₹$amount for $monthLabel is due. Please pay on time.',
+        type: 'rent_reminder',
+      );
+    }
   }
 
   // Stream: all rent records for a property in a given month/year (Owner view)
