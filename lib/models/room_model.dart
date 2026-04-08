@@ -7,6 +7,8 @@ class RoomModel {
   final int currentOccupancy;
   final String description;
   final DateTime createdAt;
+  final List<String> imageUrls;
+  final List<Map<String, dynamic>> extraFees; // [{name: 'Water Bill', amount: 200.0}, ...]
 
   RoomModel({
     required this.id,
@@ -17,6 +19,8 @@ class RoomModel {
     this.currentOccupancy = 0,
     this.description = '',
     required this.createdAt,
+    this.imageUrls = const [],
+    this.extraFees = const [],
   });
 
   String get status {
@@ -34,6 +38,8 @@ class RoomModel {
       'currentOccupancy': currentOccupancy,
       'description': description,
       'createdAt': createdAt.toIso8601String(),
+      'imageUrls': imageUrls,
+      'extraFees': extraFees,
     };
   }
 
@@ -47,6 +53,10 @@ class RoomModel {
       currentOccupancy: map['currentOccupancy'] ?? 0,
       description: map['description'] ?? '',
       createdAt: DateTime.parse(map['createdAt'] ?? DateTime.now().toIso8601String()),
+      imageUrls: List<String>.from(map['imageUrls'] ?? []),
+      extraFees: List<Map<String, dynamic>>.from(
+        (map['extraFees'] ?? []).map((e) => Map<String, dynamic>.from(e)),
+      ),
     );
   }
 }

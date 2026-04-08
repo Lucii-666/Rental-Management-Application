@@ -73,6 +73,23 @@ class PropertyService extends ChangeNotifier {
     }
   }
 
+  // Update property images
+  Future<void> updatePropertyImages(String propertyId, List<String> urls) async {
+    await _firestore.collection('properties').doc(propertyId).update({
+      'imageUrls': urls,
+    });
+  }
+
+  // Update room images
+  Future<void> updateRoomImages(String propertyId, String roomId, List<String> urls) async {
+    await _firestore
+        .collection('properties')
+        .doc(propertyId)
+        .collection('rooms')
+        .doc(roomId)
+        .update({'imageUrls': urls});
+  }
+
   // Generate a random 6-character Join Code
   String generateJoinCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -91,12 +108,13 @@ class PropertyService extends ChangeNotifier {
   }
 
   // Room Management
-  Future<void> addRoom(RoomModel room) async {
-    await _firestore
+  Future<String?> addRoom(RoomModel room) async {
+    final doc = await _firestore
         .collection('properties')
         .doc(room.propertyId)
         .collection('rooms')
         .add(room.toMap());
+    return doc.id;
   }
 
   Stream<List<RoomModel>> getRoomsStream(String propertyId) {
@@ -212,9 +230,11 @@ class PropertyService extends ChangeNotifier {
           .set({
         'name': data['tenantName'],
         'phone': data['tenantPhone'] ?? '',
+        'email': data['tenantEmail'] ?? '',
         'joinedAt': DateTime.now().toIso8601String(),
         'status': 'active',
         'propertyId': propertyId,
+        'ownerId': data['ownerId'] ?? '',
       });
 
       // 3. Notify tenant — approval + push
@@ -390,19 +410,20 @@ class PropertyService extends ChangeNotifier {
       'ownerId': propertyDoc.data()?['ownerId'],
     });
 
-    // 2. Decrement Room Occupancy
-    final roomDoc = await _firestore
+    // 2. Decrement Room Occupancy — use a transaction to avoid stale reads
+    final roomRef = _firestore
         .collection('properties')
         .doc(propertyId)
         .collection('rooms')
-        .doc(roomId)
-        .get();
+        .doc(roomId);
 
-    if (roomDoc.exists) {
-      final currentOcc = roomDoc.data()?['currentOccupancy'] ?? 1;
-      await roomDoc.reference
-          .update({'currentOccupancy': max(0, currentOcc - 1)});
-    }
+    await _firestore.runTransaction((transaction) async {
+      final roomSnap = await transaction.get(roomRef);
+      if (roomSnap.exists) {
+        final currentOcc = (roomSnap.data()?['currentOccupancy'] ?? 1) as int;
+        transaction.update(roomRef, {'currentOccupancy': max(0, currentOcc - 1)});
+      }
+    });
 
     // 3. Clear user's propertyId and roomId
     await _firestore.collection('users').doc(tenantId).update({
@@ -425,6 +446,48 @@ class PropertyService extends ChangeNotifier {
     await tenantDoc.reference.delete();
   }
 
+  /// Recalculates currentOccupancy for a room based on actual tenant docs.
+  Future<void> syncRoomOccupancy(String propertyId, String roomId) async {
+    final tenantsSnap = await _firestore
+        .collection('properties')
+        .doc(propertyId)
+        .collection('tenants')
+        .where('roomId', isEqualTo: roomId)
+        .get();
+    await _firestore
+        .collection('properties')
+        .doc(propertyId)
+        .collection('rooms')
+        .doc(roomId)
+        .update({'currentOccupancy': tenantsSnap.docs.length});
+  }
+
+  Stream<List<Map<String, dynamic>>> getOwnerCurrentTenantsStream(String ownerId) {
+    // Watch properties stream, then for each update fetch all tenants across all properties
+    return _firestore
+        .collection('properties')
+        .where('ownerId', isEqualTo: ownerId)
+        .snapshots()
+        .asyncMap((propSnapshot) async {
+      final results = <Map<String, dynamic>>[];
+      for (final propDoc in propSnapshot.docs) {
+        final tenantsSnap = await _firestore
+            .collection('properties')
+            .doc(propDoc.id)
+            .collection('tenants')
+            .get();
+        for (final t in tenantsSnap.docs) {
+          results.add({
+            ...t.data(),
+            'id': t.id,
+            'propertyName': propDoc.data()['name'] ?? '',
+          });
+        }
+      }
+      return results;
+    });
+  }
+
   Stream<List<Map<String, dynamic>>> getOwnerTenantHistoryStream(
       String ownerId) {
     return _firestore
@@ -443,11 +506,19 @@ class PropertyService extends ChangeNotifier {
     required String roomId,
     required String roomNumber,
     required String ownerId,
+    required String tenantPhone,
+    required String tenantEmail,
+    required int tenantAge,
+    required String maritalStatus,
   }) async {
     try {
       await _firestore.collection('room_requests').add({
         'tenantId': tenantId,
         'tenantName': tenantName,
+        'tenantPhone': tenantPhone,
+        'tenantEmail': tenantEmail,
+        'tenantAge': tenantAge,
+        'maritalStatus': maritalStatus,
         'propertyId': propertyId,
         'roomId': roomId,
         'roomNumber': roomNumber,
@@ -501,6 +572,16 @@ class PropertyService extends ChangeNotifier {
       final roomId = data['roomId'];
       final roomNumber = data['roomNumber'] ?? '';
 
+      // Check if tenant already has this room assigned (avoid double-increment)
+      final tenantDoc = await _firestore
+          .collection('properties')
+          .doc(propertyId)
+          .collection('tenants')
+          .doc(tenantId)
+          .get();
+      final alreadyAssigned = tenantDoc.exists &&
+          tenantDoc.data()?['roomId'] == roomId;
+
       // 1. Update User Profile with RoomId
       await _firestore
           .collection('users')
@@ -515,20 +596,22 @@ class PropertyService extends ChangeNotifier {
           .doc(tenantId)
           .update({'roomId': roomId});
 
-      // 3. Increment Room Occupancy
-      final roomRef = _firestore
-          .collection('properties')
-          .doc(propertyId)
-          .collection('rooms')
-          .doc(roomId);
+      // 3. Increment Room Occupancy only if not already assigned
+      if (!alreadyAssigned) {
+        final roomRef = _firestore
+            .collection('properties')
+            .doc(propertyId)
+            .collection('rooms')
+            .doc(roomId);
 
-      await _firestore.runTransaction((transaction) async {
-        final roomSnapshot = await transaction.get(roomRef);
-        if (roomSnapshot.exists) {
-          final current = roomSnapshot.data()?['currentOccupancy'] ?? 0;
-          transaction.update(roomRef, {'currentOccupancy': current + 1});
-        }
-      });
+        await _firestore.runTransaction((transaction) async {
+          final roomSnapshot = await transaction.get(roomRef);
+          if (roomSnapshot.exists) {
+            final current = roomSnapshot.data()?['currentOccupancy'] ?? 0;
+            transaction.update(roomRef, {'currentOccupancy': current + 1});
+          }
+        });
+      }
 
       // 4. Notify tenant — approval + push
       await _notify(

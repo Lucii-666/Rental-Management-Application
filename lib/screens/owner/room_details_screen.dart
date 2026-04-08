@@ -19,6 +19,21 @@ class RoomDetailsScreen extends StatelessWidget {
       backgroundColor: AppTheme.bg(context),
       appBar: AppBar(
         title: Text('Room ${room.roomNumber}', style: const TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(
+            tooltip: 'Fix occupancy count',
+            icon: const Icon(Icons.sync_rounded),
+            onPressed: () async {
+              await Provider.of<PropertyService>(context, listen: false)
+                  .syncRoomOccupancy(propertyId, room.id);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Occupancy count synced.')),
+                );
+              }
+            },
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -151,14 +166,14 @@ class RoomDetailsScreen extends StatelessWidget {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () {
-              Provider.of<PropertyService>(context, listen: false).removeTenantFromRoom(
+            onPressed: () async {
+              Navigator.pop(context);
+              await Provider.of<PropertyService>(context, listen: false).removeTenantFromRoom(
                 propertyId,
                 room.id,
                 tenant['id'],
                 reasonController.text,
               );
-              Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Confirm Remove'),

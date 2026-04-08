@@ -187,6 +187,10 @@ class _TenantDashboardState extends State<TenantDashboard>
             onPressed: tp.toggle,
           ),
         ),
+        IconButton(
+          icon: Icon(Icons.logout_rounded, color: AppTheme.text(context)),
+          onPressed: () => authService.signOut(),
+        ),
         const SizedBox(width: 4),
       ],
     );

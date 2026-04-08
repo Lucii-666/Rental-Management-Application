@@ -43,6 +43,38 @@ class StorageService extends ChangeNotifier {
     }
   }
 
+  Future<String?> uploadPropertyImage(String propertyId, File file) async {
+    try {
+      final path = 'properties/$propertyId/${DateTime.now().millisecondsSinceEpoch}.jpg';
+      await _storage.from(_bucket).upload(
+        path,
+        file,
+        fileOptions: const FileOptions(upsert: true),
+      );
+      return _storage.from(_bucket).getPublicUrl(path);
+    } catch (e) {
+      debugPrint('StorageService Error: $e');
+      if (e is StorageException) throw e.message;
+      throw e.toString();
+    }
+  }
+
+  Future<String?> uploadRoomImage(String propertyId, String roomId, File file) async {
+    try {
+      final path = 'rooms/$propertyId/$roomId/${DateTime.now().millisecondsSinceEpoch}.jpg';
+      await _storage.from(_bucket).upload(
+        path,
+        file,
+        fileOptions: const FileOptions(upsert: true),
+      );
+      return _storage.from(_bucket).getPublicUrl(path);
+    } catch (e) {
+      debugPrint('StorageService Error: $e');
+      if (e is StorageException) throw e.message;
+      throw e.toString();
+    }
+  }
+
   Future<String?> uploadMaintenanceImage(String requestId, File file) async {
     try {
       final path = 'maintenance/$requestId.jpg';

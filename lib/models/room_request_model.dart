@@ -2,6 +2,10 @@ class RoomRequestModel {
   final String id;
   final String tenantId;
   final String tenantName;
+  final String tenantPhone;
+  final String tenantEmail;
+  final int tenantAge;
+  final String maritalStatus; // 'Single', 'Married', 'Divorced', 'Widowed'
   final String propertyId;
   final String roomId;
   final String roomNumber;
@@ -12,6 +16,10 @@ class RoomRequestModel {
     required this.id,
     required this.tenantId,
     required this.tenantName,
+    this.tenantPhone = '',
+    this.tenantEmail = '',
+    this.tenantAge = 0,
+    this.maritalStatus = '',
     required this.propertyId,
     required this.roomId,
     required this.roomNumber,
@@ -24,6 +32,10 @@ class RoomRequestModel {
       'id': id,
       'tenantId': tenantId,
       'tenantName': tenantName,
+      'tenantPhone': tenantPhone,
+      'tenantEmail': tenantEmail,
+      'tenantAge': tenantAge,
+      'maritalStatus': maritalStatus,
       'propertyId': propertyId,
       'roomId': roomId,
       'roomNumber': roomNumber,
@@ -37,6 +49,10 @@ class RoomRequestModel {
       id: map['id'] ?? '',
       tenantId: map['tenantId'] ?? '',
       tenantName: map['tenantName'] ?? '',
+      tenantPhone: map['tenantPhone'] ?? '',
+      tenantEmail: map['tenantEmail'] ?? '',
+      tenantAge: (map['tenantAge'] ?? 0) as int,
+      maritalStatus: map['maritalStatus'] ?? '',
       propertyId: map['propertyId'] ?? '',
       roomId: map['roomId'] ?? '',
       roomNumber: map['roomNumber'] ?? '',

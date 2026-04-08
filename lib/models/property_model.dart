@@ -10,6 +10,7 @@ class PropertyModel {
   final String? joinCode;
   final DateTime? joinCodeExpiry;
   final DateTime createdAt;
+  final List<String> imageUrls;
 
   PropertyModel({
     required this.id,
@@ -23,6 +24,7 @@ class PropertyModel {
     this.joinCode,
     this.joinCodeExpiry,
     required this.createdAt,
+    this.imageUrls = const [],
   });
 
   Map<String, dynamic> toMap() {
@@ -37,6 +39,7 @@ class PropertyModel {
       'joinCode': joinCode,
       'joinCodeExpiry': joinCodeExpiry?.toIso8601String(),
       'createdAt': createdAt.toIso8601String(),
+      'imageUrls': imageUrls,
     };
   }
 
@@ -51,10 +54,11 @@ class PropertyModel {
       floors: map['floors'],
       notes: map['notes'],
       joinCode: map['joinCode'],
-      joinCodeExpiry: map['joinCodeExpiry'] != null 
-          ? DateTime.parse(map['joinCodeExpiry']) 
+      joinCodeExpiry: map['joinCodeExpiry'] != null
+          ? DateTime.parse(map['joinCodeExpiry'])
           : null,
       createdAt: DateTime.parse(map['createdAt'] ?? DateTime.now().toIso8601String()),
+      imageUrls: List<String>.from(map['imageUrls'] ?? []),
     );
   }
 }

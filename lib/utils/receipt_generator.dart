@@ -4,7 +4,12 @@ import 'package:printing/printing.dart';
 import '../models/rent_model.dart';
 
 class ReceiptGenerator {
-  static Future<void> shareReceipt(RentPaymentModel rent, {String? ownerName, String? propertyName}) async {
+  static Future<void> shareReceipt(
+    RentPaymentModel rent, {
+    String? ownerName,
+    String? propertyName,
+    List<Map<String, dynamic>>? extraFees,
+  }) async {
     final pdf = pw.Document();
 
     final primaryColor = PdfColor.fromHex('#059669');
@@ -123,20 +128,56 @@ class ReceiptGenerator {
                 ),
                 child: pw.Column(
                   children: [
+                    // Base rent line
                     _buildAmountRow('Base Rent', rent.baseAmount, textGrey, primaryColor),
+
+                    // Extra fees breakdown (if any)
+                    if (extraFees != null && extraFees.isNotEmpty)
+                      ...extraFees.map((fee) {
+                        final name = (fee['name'] ?? 'Extra Fee').toString();
+                        final amount = ((fee['amount'] ?? 0.0) as num).toDouble();
+                        return pw.Padding(
+                          padding: const pw.EdgeInsets.only(top: 8),
+                          child: _buildAmountRow(name, amount, textGrey, primaryColor),
+                        );
+                      }),
+
+                    // Carry forward (if any)
                     if (rent.carryForward > 0) ...[
                       pw.SizedBox(height: 8),
-                      _buildAmountRow('Previous Due (Carry Forward)', rent.carryForward, textGrey, PdfColor.fromHex('#F59E0B')),
+                      _buildAmountRow(
+                        'Carry Forward',
+                        rent.carryForward,
+                        textGrey,
+                        PdfColor.fromHex('#F59E0B'),
+                      ),
                     ],
+
                     pw.SizedBox(height: 8),
                     pw.Divider(color: divider),
                     pw.SizedBox(height: 8),
-                    _buildAmountRow('Total Due', rent.amount, textDark, textDark, isBold: true),
+
+                    // Total line — uses rent.amount which already accounts for everything
+                    _buildAmountRow('Total', rent.amount, textDark, textDark, isBold: true),
+
                     pw.SizedBox(height: 8),
-                    _buildAmountRow('Amount Paid', rent.paidAmount > 0 ? rent.paidAmount : rent.amount, textDark, primaryColor, isBold: true),
+                    _buildAmountRow(
+                      'Amount Paid',
+                      rent.paidAmount > 0 ? rent.paidAmount : rent.amount,
+                      textDark,
+                      primaryColor,
+                      isBold: true,
+                    ),
+
                     if (rent.status == RentStatus.partiallyPaid) ...[
                       pw.SizedBox(height: 8),
-                      _buildAmountRow('Balance (Next Month)', rent.balance, textDark, PdfColor.fromHex('#EF4444'), isBold: true),
+                      _buildAmountRow(
+                        'Balance (Next Month)',
+                        rent.balance,
+                        textDark,
+                        PdfColor.fromHex('#EF4444'),
+                        isBold: true,
+                      ),
                     ],
                   ],
                 ),
