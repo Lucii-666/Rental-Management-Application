@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="https://github-readme-stats.vercel.app/api?username=Lucii-666&repo=Rental-Management-Application&show_icons=true&theme=radical&hide_border=true&title_color=00B4D8&icon_color=00B4D8" alt="GitHub Repo Stats" />
+  <img src="https://github-readme-stats.vercel.app/api?username=Ashutosh-177&repo=Rental-Management-Application&show_icons=true&theme=radical&hide_border=true&title_color=00B4D8&icon_color=00B4D8" alt="GitHub Repo Stats" />
 </p>
 
 *The ultimate ecosystem bridging the gap between Property Owners and Tenants with enterprise-level security and real-time syncing.*
